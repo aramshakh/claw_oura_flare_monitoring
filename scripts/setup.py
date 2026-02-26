@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive setup for oura-fmf local storage and tokens."""
+"""Interactive setup for oura-health-signals local storage and tokens."""
 
 import json
 import os
@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def main():
-    base = Path(os.path.expanduser(os.getenv("OURA_FMF_BASE_DIR", "~/.openclaw/oura-fmf"))).resolve()
+    base = Path(os.path.expanduser(os.getenv("OURA_Health_BASE_DIR", "~/.openclaw/oura-health-signals"))).resolve()
     (base / "raw").mkdir(parents=True, exist_ok=True)
     (base / "daily").mkdir(parents=True, exist_ok=True)
 

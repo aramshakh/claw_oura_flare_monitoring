@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Oura FMF sync script.
+Oura Health sync script.
 - Fetches Oura sleep/activity/readiness/stress/resilience/sleep_time
 - Calculates coaching signals
-- Adds FMF early-warning alerts
+- Adds Health early-warning alerts
 - Saves normalized daily JSON
 """
 
@@ -210,15 +210,15 @@ def fmf_alerts(readiness):
     hrv = readiness.get("hrv_balance")
     rhr = readiness.get("resting_heart_rate")
     if t is not None and t >= 0.5:
-        alerts.append(f"🌡️ FMF ALERT: Temperature +{t}°C")
+        alerts.append(f"🌡️ Flare ALERT: Temperature +{t}°C")
     elif t is not None and t >= 0.3:
-        alerts.append(f"🌡️ FMF WARNING: Temperature +{t}°C")
+        alerts.append(f"🌡️ Flare WARNING: Temperature +{t}°C")
     if hrv is not None and hrv < 60:
-        alerts.append(f"📉 FMF WARNING: HRV balance low ({hrv})")
+        alerts.append(f"📉 Flare WARNING: HRV balance low ({hrv})")
     if rhr is not None and rhr < 70:
-        alerts.append(f"❤️ FMF WARNING: RHR contributor low ({rhr})")
+        alerts.append(f"❤️ Flare WARNING: RHR contributor low ({rhr})")
     if len(alerts) >= 2:
-        alerts.insert(0, "⚠️ FMF: Multiple early warning signs detected")
+        alerts.insert(0, "⚠️ Flare risk: Multiple early warning signs detected")
     return alerts
 
 
@@ -230,7 +230,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    base_dir = os.getenv("OURA_FMF_BASE_DIR", "~/.openclaw/oura-fmf")
+    base_dir = os.getenv("OURA_Health_BASE_DIR", "~/.openclaw/oura-health-signals")
     base = expand(base_dir)
     (base / "raw").mkdir(parents=True, exist_ok=True)
     (base / "daily").mkdir(parents=True, exist_ok=True)

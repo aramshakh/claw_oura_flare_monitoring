@@ -1,18 +1,18 @@
-# Oura FMF
+# Oura Health Signals
 
-Oura Ring coaching signals with FMF (Familial Mediterranean Fever) health monitoring for [OpenClaw](https://openclaw.ai).
+Oura Ring coaching signals with generic health monitoring for [OpenClaw](https://openclaw.ai).
 
 ## Features
 
 - **6 Coaching Signals** — actionable metrics calculated from Oura data
-- **FMF Monitoring** — temperature deviation tracking for early fever detection
+- **Health Flare Monitoring** — temperature deviation tracking for early warning
 - **Daily Reports** — formatted summaries for coaching workflows
 - **Cron Integration** — automated daily sync
 
 ## Who is this for?
 
 - People who want **actionable coaching signals**, not just raw Oura scores
-- Users with **FMF or periodic fever syndromes** who want early warning alerts
+- Users with periodic flare patterns or fever syndromes who want early warning alerts
 - OpenClaw users looking for health data integration
 
 ## Signals
@@ -26,7 +26,7 @@ Oura Ring coaching signals with FMF (Familial Mediterranean Fever) health monito
 | Sleep Debt | Cumulative deficit (3 days) | > 30 ⚠️ |
 | Routine Stability | Bedtime consistency (7 days) | < 70 ⚠️ |
 
-## FMF Monitoring
+## Health Monitoring
 
 Tracks early warning signs of fever attacks:
 
@@ -48,8 +48,8 @@ Tracks early warning signs of fever attacks:
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/YOUR_USERNAME/oura-fmf.git
-cd oura-fmf
+git clone https://github.com/YOUR_USERNAME/oura-health-signals.git
+cd oura-health-signals
 ```
 
 2. **Install dependencies:**
@@ -70,7 +70,7 @@ python3 scripts/setup.py
 
 5. **Copy and edit config:**
 ```bash
-cp config/config.example.yaml ~/.openclaw/oura-fmf/config.yaml
+cp config/config.example.yaml ~/.openclaw/oura-health-signals/config.yaml
 # Edit thresholds as needed
 ```
 
@@ -90,8 +90,8 @@ python3 scripts/oura_report.py
 ```
 ## Body State (Oura) — 2026-02-25
 
-**🚨 FMF Monitoring:**
-- 🌡️ FMF WARNING: Temperature +0.37°C (watch)
+**🚨 Health Monitoring:**
+- 🌡️ Health WARNING: Temperature +0.37°C (watch)
 
 **Sleep:** 6h 22m | Efficiency 92%
 **Body Status:**
@@ -130,12 +130,12 @@ For automatic daily sync:
 
 ```bash
 # Add to crontab (20:00 local time example)
-0 16 * * * cd ~/.openclaw/oura-fmf && python3 scripts/oura_sync.py >> /var/log/oura_sync.log 2>&1
+0 16 * * * cd ~/.openclaw/oura-health-signals && python3 scripts/oura_sync.py >> /var/log/oura_sync.log 2>&1
 ```
 
 ## Configuration
 
-Edit `~/.openclaw/oura-fmf/config.yaml`:
+Edit `~/.openclaw/oura-health-signals/config.yaml`:
 
 ```yaml
 targets:
@@ -161,28 +161,28 @@ If using with OpenClaw, install as a skill:
 
 ```bash
 # Copy to skills directory
-cp -r oura-fmf ~/.openclaw/workspace/skills/
+cp -r oura-health-signals ~/.openclaw/workspace/skills/
 
 # Or symlink
-ln -s $(pwd)/oura-fmf ~/.openclaw/workspace/skills/oura-fmf
+ln -s $(pwd)/oura-health-signals ~/.openclaw/workspace/skills/oura-health-signals
 ```
 
 The agent will automatically use SKILL.md for interpretation guidance.
 
 ## Data Privacy
 
-- All data stored locally in `~/.openclaw/oura-fmf/`
+- All data stored locally in `~/.openclaw/oura-health-signals/`
 - Tokens stored with restricted permissions (chmod 600)
 - No data sent to third parties
 - You control your health data
 
 ## Comparison with OuraClaw
 
-| Feature | OuraClaw | oura-fmf |
+| Feature | OuraClaw | oura-health-signals |
 |---------|----------|----------|
 | Approach | General health dashboard | Coaching-focused signals |
 | Signals | Oura scores as-is | 6 custom calculated |
-| FMF Monitoring | ❌ | ✅ |
+| Health Monitoring | ❌ | ✅ |
 | Language | TypeScript | Python |
 | Focus | Ad-hoc queries | Daily coaching reports |
 
@@ -199,4 +199,4 @@ MIT License - see [LICENSE](LICENSE) file.
 
 ## Disclaimer
 
-This tool is for informational purposes only. It is not a medical device and should not be used for medical diagnosis or treatment. Always consult healthcare professionals for medical advice, especially regarding FMF management.
+This tool is for informational purposes only. It is not a medical device and should not be used for medical diagnosis or treatment. Always consult healthcare professionals for medical advice, especially regarding Health management.

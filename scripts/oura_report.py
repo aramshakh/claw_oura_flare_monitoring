@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render latest Oura FMF daily file as markdown report."""
+"""Render latest Oura Health daily file as markdown report."""
 
 import argparse
 import json
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def base_dir() -> Path:
-    return Path(os.path.expanduser(os.getenv("OURA_FMF_BASE_DIR", "~/.openclaw/oura-fmf"))).resolve()
+    return Path(os.path.expanduser(os.getenv("OURA_Health_BASE_DIR", "~/.openclaw/oura-health-signals"))).resolve()
 
 
 def load_day(date_str: str):
@@ -54,7 +54,7 @@ def render(d):
 
     lines = [f"## Body State (Oura) — {d.get('date')}"]
     if alerts:
-        lines += ["", "**🚨 FMF Monitoring:**"] + [f"- {x}" for x in alerts]
+        lines += ["", "**🚨 Health Monitoring:**"] + [f"- {x}" for x in alerts]
 
     lines += [
         "",

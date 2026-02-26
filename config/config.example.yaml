@@ -1,4 +1,4 @@
-# Oura FMF configuration
+# Oura Health configuration
 
 targets:
   sleep_minutes: 420
@@ -29,7 +29,7 @@ weights:
 
 storage:
   # Change to your preferred location
-  base_dir: ~/.openclaw/oura-fmf
+  base_dir: ~/.openclaw/oura-health-signals
 
 schedule:
   # informational only
