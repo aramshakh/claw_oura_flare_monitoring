@@ -116,13 +116,21 @@ python3 scripts/oura_report.py
 # Sync options
 python3 scripts/oura_sync.py --backfill 30    # Last 30 days
 python3 scripts/oura_sync.py --dry-run        # Test without saving
-python3 scripts/oura_sync.py --verbose        # Debug output
-
 # Report options
 python3 scripts/oura_report.py --date 2026-02-25
 python3 scripts/oura_report.py --yesterday
 python3 scripts/oura_report.py --json
 ```
+
+
+## Daily JSON Contract
+
+Each synced day is written as `daily/YYYY-MM-DD.json` with:
+
+- `schema_version`: currently `daily_context.v1`
+- `quality`: completeness, missing endpoints, and confidence
+- normalized endpoint payloads (`sleep`, `activity`, `readiness`, `stress`, `resilience`, `sleep_time`)
+- computed signals and flare alerts
 
 ## Cron Setup
 

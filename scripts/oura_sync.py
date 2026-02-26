@@ -10,7 +10,10 @@ Oura Health sync script.
 import argparse
 import json
 import os
+import random
 import statistics
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,6 +22,7 @@ import yaml
 
 API_BASE = "https://api.ouraring.com/v2/usercollection"
 TOKEN_URL = "https://api.ouraring.com/oauth/token"
+DEFAULT_RETRIES = 3
 
 
 def expand(path: str) -> Path:
@@ -43,6 +47,30 @@ def load_tokens(base: Path):
 def save_tokens(base: Path, tokens: dict):
     p = base / "tokens.json"
     p.write_text(json.dumps(tokens, indent=2))
+    os.chmod(p, 0o600)
+
+
+def request_with_retry(method: str, url: str, *, retries: int = DEFAULT_RETRIES, **kwargs):
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.request(method, url, timeout=30, **kwargs)
+            if r.status_code == 429 and attempt < retries:
+                retry_after = r.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after and retry_after.isdigit() else (2 ** attempt) + random.random()
+                time.sleep(wait)
+                continue
+            if 500 <= r.status_code < 600 and attempt < retries:
+                time.sleep((2 ** attempt) + random.random())
+                continue
+            r.raise_for_status()
+            return r
+        except requests.RequestException as e:
+            last_err = e
+            if attempt >= retries:
+                break
+            time.sleep((2 ** attempt) + random.random())
+    raise RuntimeError(f"Request failed after retries: {method} {url}") from last_err
 
 
 def get_valid_token(base: Path, tokens: dict):
@@ -55,14 +83,16 @@ def get_valid_token(base: Path, tokens: dict):
         except Exception:
             pass
 
-    # refresh
-    r = requests.post(TOKEN_URL, data={
-        "grant_type": "refresh_token",
-        "refresh_token": tokens.get("refresh_token"),
-        "client_id": tokens.get("client_id"),
-        "client_secret": tokens.get("client_secret"),
-    }, timeout=30)
-    r.raise_for_status()
+    r = request_with_retry(
+        "POST",
+        TOKEN_URL,
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tokens.get("refresh_token"),
+            "client_id": tokens.get("client_id"),
+            "client_secret": tokens.get("client_secret"),
+        },
+    )
     upd = r.json()
     merged = {**tokens, **upd}
     expires_in = upd.get("expires_in", 86400)
@@ -72,13 +102,12 @@ def get_valid_token(base: Path, tokens: dict):
 
 
 def fetch(endpoint: str, start: str, end: str, token: str):
-    r = requests.get(
+    r = request_with_retry(
+        "GET",
         f"{API_BASE}/{endpoint}",
         params={"start_date": start, "end_date": end},
         headers={"Authorization": f"Bearer {token}"},
-        timeout=30,
     )
-    r.raise_for_status()
     return r.json()
 
 
@@ -202,24 +231,66 @@ def stability_signal(history):
     return round(max(0, min(100, 100 - statistics.stdev(vals) * 20)), 1)
 
 
-def fmf_alerts(readiness):
+def fmf_alerts(readiness, cfg):
     alerts = []
     if not readiness:
         return alerts
+
+    fmf_cfg = cfg.get("fmf", {})
+    temperature_alert = fmf_cfg.get("temperature_alert", 0.5)
+    temperature_warning = fmf_cfg.get("temperature_warning", 0.3)
+    hrv_warning = fmf_cfg.get("hrv_warning", 60)
+    rhr_warning = fmf_cfg.get("rhr_warning", 70)
+
     t = readiness.get("temperature_deviation")
     hrv = readiness.get("hrv_balance")
     rhr = readiness.get("resting_heart_rate")
-    if t is not None and t >= 0.5:
+
+    if t is not None and t >= temperature_alert:
         alerts.append(f"🌡️ Flare ALERT: Temperature +{t}°C")
-    elif t is not None and t >= 0.3:
+    elif t is not None and t >= temperature_warning:
         alerts.append(f"🌡️ Flare WARNING: Temperature +{t}°C")
-    if hrv is not None and hrv < 60:
+    if hrv is not None and hrv < hrv_warning:
         alerts.append(f"📉 Flare WARNING: HRV balance low ({hrv})")
-    if rhr is not None and rhr < 70:
+    if rhr is not None and rhr < rhr_warning:
         alerts.append(f"❤️ Flare WARNING: RHR contributor low ({rhr})")
     if len(alerts) >= 2:
         alerts.insert(0, "⚠️ Flare risk: Multiple early warning signs detected")
     return alerts
+
+
+def quality_summary(sleep, activity, readiness, stress, resilience, sleep_time):
+    checks = {
+        "sleep": sleep is not None,
+        "activity": activity is not None,
+        "readiness": readiness is not None,
+        "stress": stress is not None,
+        "resilience": resilience is not None,
+        "sleep_time": sleep_time is not None,
+    }
+    present = sum(1 for v in checks.values() if v)
+    completeness = round(present / len(checks), 2)
+    missing = [k for k, v in checks.items() if not v]
+    confidence = "high" if completeness >= 0.83 else "medium" if completeness >= 0.5 else "low"
+    return {"completeness": completeness, "missing_endpoints": missing or None, "confidence": confidence}
+
+
+@contextmanager
+def file_lock(lock_path: Path):
+    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    try:
+        os.write(fd, str(os.getpid()).encode("utf-8"))
+        yield
+    finally:
+        os.close(fd)
+        if lock_path.exists():
+            lock_path.unlink()
+
+
+def atomic_write_json(path: Path, payload: dict):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2))
+    tmp.replace(path)
 
 
 def main():
@@ -235,97 +306,111 @@ def main():
     (base / "raw").mkdir(parents=True, exist_ok=True)
     (base / "daily").mkdir(parents=True, exist_ok=True)
 
-    cfg = load_config(base)
+    lock_path = base / ".sync.lock"
+    if lock_path.exists():
+        raise SystemExit(f"Sync lock exists, another run may be active: {lock_path}")
 
-    end = datetime.now().date() if not args.end else datetime.strptime(args.end, "%Y-%m-%d").date()
-    if args.start:
-        start = datetime.strptime(args.start, "%Y-%m-%d").date()
-    elif args.backfill:
-        start = end - timedelta(days=args.backfill)
-    else:
-        start = end - timedelta(days=7)
+    with file_lock(lock_path):
+        cfg = load_config(base)
 
-    tokens = load_tokens(base)
-    token, _ = get_valid_token(base, tokens)
+        end = datetime.now().date() if not args.end else datetime.strptime(args.end, "%Y-%m-%d").date()
+        if args.start:
+            start = datetime.strptime(args.start, "%Y-%m-%d").date()
+        elif args.backfill:
+            start = end - timedelta(days=args.backfill)
+        else:
+            start = end - timedelta(days=7)
 
-    endpoints = ["sleep", "daily_activity", "daily_readiness", "daily_stress", "daily_resilience", "sleep_time"]
-    raw = {e: fetch(e, str(start), str(end), token) for e in endpoints}
+        tokens = load_tokens(base)
+        token, _ = get_valid_token(base, tokens)
 
-    if args.dry_run:
-        print(json.dumps({k: len(v.get("data", [])) for k, v in raw.items()}, indent=2))
-        return
+        endpoints = ["sleep", "daily_activity", "daily_readiness", "daily_stress", "daily_resilience", "sleep_time"]
+        raw = {e: fetch(e, str(start), str(end), token) for e in endpoints}
 
-    today = str(end)
-    for e, payload in raw.items():
-        (base / "raw" / f"{today}-{e}.json").write_text(json.dumps(payload, indent=2))
+        if args.dry_run:
+            print(json.dumps({k: len(v.get("data", [])) for k, v in raw.items()}, indent=2))
+            return
 
-    sleep_map, act_map, read_map, str_map, res_map, st_map = {}, {}, {}, {}, {}, {}
-    for x in raw["sleep"].get("data", []):
-        n = normalize_sleep(x); sleep_map.setdefault(n["date"], []).append(n)
-    for x in raw["daily_activity"].get("data", []):
-        n = normalize_activity(x); act_map[n["date"]] = n
-    for x in raw["daily_readiness"].get("data", []):
-        n = normalize_readiness(x); read_map[n["date"]] = n
-    for x in raw["daily_stress"].get("data", []):
-        n = normalize_stress(x); str_map[n["date"]] = n
-    for x in raw["daily_resilience"].get("data", []):
-        n = normalize_resilience(x); res_map[n["date"]] = n
-    for x in raw["sleep_time"].get("data", []):
-        n = normalize_sleep_time(x); st_map[n["date"]] = n
+        today = str(end)
+        for e, payload in raw.items():
+            atomic_write_json(base / "raw" / f"{today}-{e}.json", payload)
 
-    all_dates = sorted(set().union(sleep_map.keys(), act_map.keys(), read_map.keys(), str_map.keys()))
+        sleep_map, act_map, read_map, str_map, res_map, st_map = {}, {}, {}, {}, {}, {}
+        for x in raw["sleep"].get("data", []):
+            n = normalize_sleep(x)
+            sleep_map.setdefault(n["date"], []).append(n)
+        for x in raw["daily_activity"].get("data", []):
+            n = normalize_activity(x)
+            act_map[n["date"]] = n
+        for x in raw["daily_readiness"].get("data", []):
+            n = normalize_readiness(x)
+            read_map[n["date"]] = n
+        for x in raw["daily_stress"].get("data", []):
+            n = normalize_stress(x)
+            str_map[n["date"]] = n
+        for x in raw["daily_resilience"].get("data", []):
+            n = normalize_resilience(x)
+            res_map[n["date"]] = n
+        for x in raw["sleep_time"].get("data", []):
+            n = normalize_sleep_time(x)
+            st_map[n["date"]] = n
 
-    history = []
-    for d in all_dates:
-        ss = sleep_map.get(d, [])
-        if ss:
-            main_sleep = max(ss, key=lambda z: z.get("total_minutes", 0))
-            if (main_sleep.get("total_minutes", 0) or 0) >= 120:
-                history.append(main_sleep)
+        all_dates = sorted(set().union(sleep_map.keys(), act_map.keys(), read_map.keys(), str_map.keys()))
 
-    for d in all_dates:
-        ss = sleep_map.get(d, [])
-        main_sleep = max(ss, key=lambda z: z.get("total_minutes", 0)) if ss else None
-        naps = [x for x in ss if x != main_sleep] if main_sleep else []
-        activity = act_map.get(d)
-        readiness = read_map.get(d)
-        stress = str_map.get(d)
-        resilience = res_map.get(d)
-        sleep_time = st_map.get(d)
+        history = []
+        for d in all_dates:
+            ss = sleep_map.get(d, [])
+            if ss:
+                main_sleep = max(ss, key=lambda z: z.get("total_minutes", 0))
+                if (main_sleep.get("total_minutes", 0) or 0) >= 120:
+                    history.append(main_sleep)
 
-        rec = recovery_signal(main_sleep, cfg.get("targets", {}).get("sleep_minutes", 420))
-        foc = focus_signal(main_sleep, rec)
-        ene = energy_signal(activity, cfg.get("targets", {}).get("steps", 8000))
-        str_sig = stress_signal(stress)
-        debt = sleep_debt_signal(history, cfg.get("targets", {}).get("sleep_minutes", 420))
-        stab = stability_signal(history)
+        for d in all_dates:
+            ss = sleep_map.get(d, [])
+            main_sleep = max(ss, key=lambda z: z.get("total_minutes", 0)) if ss else None
+            naps = [x for x in ss if x != main_sleep] if main_sleep else []
+            activity = act_map.get(d)
+            readiness = read_map.get(d)
+            stress = str_map.get(d)
+            resilience = res_map.get(d)
+            sleep_time = st_map.get(d)
 
-        alerts = fmf_alerts(readiness)
+            rec = recovery_signal(main_sleep, cfg.get("targets", {}).get("sleep_minutes", 420))
+            foc = focus_signal(main_sleep, rec)
+            ene = energy_signal(activity, cfg.get("targets", {}).get("steps", 8000))
+            str_sig = stress_signal(stress)
+            debt = sleep_debt_signal(history, cfg.get("targets", {}).get("sleep_minutes", 420))
+            stab = stability_signal(history)
 
-        daily = {
-            "date": d,
-            "data_source": "oura_api_v2",
-            "sync_timestamp": datetime.now(timezone.utc).isoformat(),
-            "sleep": main_sleep,
-            "sleep_naps": naps or None,
-            "activity": activity,
-            "readiness": readiness,
-            "stress": stress,
-            "resilience": resilience,
-            "sleep_time": sleep_time,
-            "signals": {
-                "recovery": rec,
-                "focus_capacity": foc,
-                "energy": ene,
-                "stress": str_sig,
-                "sleep_debt": debt,
-                "routine_stability": stab,
-            },
-            "fmf_alerts": alerts or None,
-        }
-        (base / "daily" / f"{d}.json").write_text(json.dumps(daily, indent=2))
+            alerts = fmf_alerts(readiness, cfg)
+            quality = quality_summary(main_sleep, activity, readiness, stress, resilience, sleep_time)
 
-    print(f"✅ Synced {len(all_dates)} day(s) into {base}")
+            daily = {
+                "schema_version": "daily_context.v1",
+                "date": d,
+                "data_source": "oura_api_v2",
+                "sync_timestamp": datetime.now(timezone.utc).isoformat(),
+                "quality": quality,
+                "sleep": main_sleep,
+                "sleep_naps": naps or None,
+                "activity": activity,
+                "readiness": readiness,
+                "stress": stress,
+                "resilience": resilience,
+                "sleep_time": sleep_time,
+                "signals": {
+                    "recovery": rec,
+                    "focus_capacity": foc,
+                    "energy": ene,
+                    "stress": str_sig,
+                    "sleep_debt": debt,
+                    "routine_stability": stab,
+                },
+                "fmf_alerts": alerts or None,
+            }
+            atomic_write_json(base / "daily" / f"{d}.json", daily)
+
+        print(f"✅ Synced {len(all_dates)} day(s) into {base}")
 
 
 if __name__ == "__main__":

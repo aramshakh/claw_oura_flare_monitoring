@@ -51,6 +51,7 @@ def render(d):
     rs = d.get("resilience") or {}
     sig = d.get("signals") or {}
     alerts = d.get("fmf_alerts") or []
+    quality = d.get("quality") or {}
 
     lines = [f"## Body State (Oura) — {d.get('date')}"]
     if alerts:
@@ -70,6 +71,8 @@ def render(d):
         "",
         "**Activity (today):**",
         f"- Steps: {a.get('steps', 0):,} | Score: {a.get('activity_score', '—')}",
+        "",
+        f"**Data quality:** {quality.get('confidence', 'unknown')} (completeness {quality.get('completeness', '—')})",
         "",
         "**Signals (6):**",
         f"- Recovery: {sig.get('recovery', 0):.0f}/100 {icon(sig.get('recovery', 0), 60)}",
