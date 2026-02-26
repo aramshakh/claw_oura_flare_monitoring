@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Secrets and local state
+tokens.json
+*.token
+.env
+.env.*
+
+# Runtime data (generated)
+data/
+raw/
+daily/
+
+# OpenClaw local state
+.openclaw/

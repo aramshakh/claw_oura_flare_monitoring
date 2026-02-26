@@ -1,0 +1,36 @@
+# Oura FMF configuration
+
+targets:
+  sleep_minutes: 420
+  steps: 8000
+
+thresholds:
+  recovery_low: 60
+  recovery_high: 80
+  focus_low: 65
+  energy_low: 60
+  stress_high: 50
+  sleep_debt_high: 30
+  routine_stability_low: 70
+
+fmf:
+  temperature_warning: 0.3
+  temperature_alert: 0.5
+  rhr_warning: 70
+  hrv_warning: 60
+
+weights:
+  recovery_duration: 0.6
+  recovery_efficiency: 0.4
+  focus_latency_max_penalty: 20
+  focus_awakenings_max_penalty: 20
+  energy_steps: 0.5
+  energy_score: 0.5
+
+storage:
+  # Change to your preferred location
+  base_dir: ~/.openclaw/oura-fmf
+
+schedule:
+  # informational only
+  sync_time_local: "20:00"
