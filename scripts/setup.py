@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def main():
-    base = Path(os.path.expanduser(os.getenv("OURA_Health_BASE_DIR", "~/.openclaw/oura-health-signals"))).resolve()
+    base = Path(os.path.expanduser(os.getenv("OURA_HEALTH_BASE_DIR") or os.getenv("OURA_Health_BASE_DIR") or "~/.openclaw/oura-health-signals")).resolve()
     (base / "raw").mkdir(parents=True, exist_ok=True)
     (base / "daily").mkdir(parents=True, exist_ok=True)
 

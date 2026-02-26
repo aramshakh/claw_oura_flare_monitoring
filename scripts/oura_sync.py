@@ -210,16 +210,22 @@ def fmf_alerts(readiness):
     hrv = readiness.get("hrv_balance")
     rhr = readiness.get("resting_heart_rate")
     if t is not None and t >= 0.5:
-        alerts.append(f"🌡️ Flare ALERT: Temperature +{t}°C")
+        alerts.append(f"🌡️ Health ALERT: Temperature +{t}°C (elevated)")
     elif t is not None and t >= 0.3:
-        alerts.append(f"🌡️ Flare WARNING: Temperature +{t}°C")
+        alerts.append(f"🌡️ Health WARNING: Temperature +{t}°C (watch)")
     if hrv is not None and hrv < 60:
-        alerts.append(f"📉 Flare WARNING: HRV balance low ({hrv})")
+        alerts.append(f"📉 Health WARNING: HRV balance low ({hrv})")
     if rhr is not None and rhr < 70:
-        alerts.append(f"❤️ Flare WARNING: RHR contributor low ({rhr})")
+        alerts.append(f"❤️ Health WARNING: RHR contributor low ({rhr})")
     if len(alerts) >= 2:
-        alerts.insert(0, "⚠️ Flare risk: Multiple early warning signs detected")
+        alerts.insert(0, "⚠️ Health: Multiple early warning signs detected — consider rest day")
     return alerts
+
+
+def resolve_base_dir() -> Path:
+    # Preferred env var (uppercase). Keep legacy alias for backward compatibility.
+    base_dir = os.getenv("OURA_HEALTH_BASE_DIR") or os.getenv("OURA_Health_BASE_DIR") or "~/.openclaw/oura-health-signals"
+    return expand(base_dir)
 
 
 def main():
@@ -230,8 +236,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    base_dir = os.getenv("OURA_Health_BASE_DIR", "~/.openclaw/oura-health-signals")
-    base = expand(base_dir)
+    base = resolve_base_dir()
     (base / "raw").mkdir(parents=True, exist_ok=True)
     (base / "daily").mkdir(parents=True, exist_ok=True)
 
@@ -276,12 +281,6 @@ def main():
     all_dates = sorted(set().union(sleep_map.keys(), act_map.keys(), read_map.keys(), str_map.keys()))
 
     history = []
-    for d in all_dates:
-        ss = sleep_map.get(d, [])
-        if ss:
-            main_sleep = max(ss, key=lambda z: z.get("total_minutes", 0))
-            if (main_sleep.get("total_minutes", 0) or 0) >= 120:
-                history.append(main_sleep)
 
     for d in all_dates:
         ss = sleep_map.get(d, [])
@@ -292,6 +291,9 @@ def main():
         stress = str_map.get(d)
         resilience = res_map.get(d)
         sleep_time = st_map.get(d)
+
+        if main_sleep and (main_sleep.get("total_minutes", 0) or 0) >= 120:
+            history.append(main_sleep)
 
         rec = recovery_signal(main_sleep, cfg.get("targets", {}).get("sleep_minutes", 420))
         foc = focus_signal(main_sleep, rec)

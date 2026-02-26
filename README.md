@@ -48,8 +48,8 @@ Tracks early warning signs of fever attacks:
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/YOUR_USERNAME/oura-health-signals.git
-cd oura-health-signals
+git clone https://github.com/aramshakh/claw_oura_flare_monitoring.git
+cd claw_oura_flare_monitoring
 ```
 
 2. **Install dependencies:**
@@ -73,6 +73,19 @@ python3 scripts/setup.py
 cp config/config.example.yaml ~/.openclaw/oura-health-signals/config.yaml
 # Edit thresholds as needed
 ```
+
+
+
+### Optional environment variable
+
+By default data is stored under `~/.openclaw/oura-health-signals/`.
+You can override it:
+
+```bash
+export OURA_HEALTH_BASE_DIR=~/.openclaw/oura-health-signals
+```
+
+(Legacy `OURA_Health_BASE_DIR` is still supported for backward compatibility.)
 
 ## Usage
 

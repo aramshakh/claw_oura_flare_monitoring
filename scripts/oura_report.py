@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def base_dir() -> Path:
-    return Path(os.path.expanduser(os.getenv("OURA_Health_BASE_DIR", "~/.openclaw/oura-health-signals"))).resolve()
+    return Path(os.path.expanduser(os.getenv("OURA_HEALTH_BASE_DIR") or os.getenv("OURA_Health_BASE_DIR") or "~/.openclaw/oura-health-signals")).resolve()
 
 
 def load_day(date_str: str):
